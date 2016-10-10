@@ -166,6 +166,7 @@ public:
 					if (angleFixed) {
 						phoneNumber += (clickNumber + '0');
 						std::cout << phoneNumber << std::endl;
+						angleFixed = false;
 					}
 					while (angle > 0) {
 						if (angle > speed) {
