@@ -16,16 +16,19 @@ SDL_Texture *textureButtom;
 SDL_Texture *textureRoundel;
 SDL_Texture *texturePointer;
 SDL_Point roundelCenterPoint;
-
+bool played;
 struct {
 	SDL_AudioSpec spec;
-	Uint8 *sound; /* Pointer to wave data */
-	Uint32 soundlen; /* Length of wave data */
+	unsigned char *sound; /* Pointer to wave data */
+	unsigned int soundlen; /* Length of wave data */
 	int soundpos; /* Current play position */
 } wave;
 
-void fillerup(void *unused, Uint8 * stream, int len) {
-	Uint8 *waveptr;
+void fillerup(void *unused, unsigned char * stream, int len) {
+
+	if (wave.soundlen >= len)
+		return;
+	unsigned char *waveptr;
 	int waveleft;
 
 	/* Set up the pointers */
@@ -41,8 +44,10 @@ void fillerup(void *unused, Uint8 * stream, int len) {
 		waveleft = wave.soundlen;
 		wave.soundpos = 0;
 	}
+
 	SDL_memcpy(stream, waveptr, len);
 	wave.soundpos += len;
+	SDL_Log("Play end");
 }
 void reportError(void *pointer) {
 	if (pointer == nullptr) {
@@ -189,45 +194,27 @@ int main(int argc, char** argv) {
 					char filename[50] = { 0 };
 					sprintf(filename, "resources/audio/%c.wav",
 							clickNumber + '0');
-
-					/* Load the wave file into memory */
-					if (SDL_LoadWAV(filename, &wave.spec, &wave.sound,
-							&wave.soundlen) == NULL) {
-						SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-								SDL_GetError());
-
-					}
-
-					wave.spec.callback = fillerup; //设置回调函数
-
-					/* Show the list of available drivers */
-					SDL_Log("Available audio drivers:");
-					for (int i = 0; i < SDL_GetNumAudioDrivers(); ++i) {
-						SDL_Log("%i: %s", i, SDL_GetAudioDriver(i));
-					}
-
-					/* Initialize fillerup() variables */
-					if (SDL_OpenAudio(&wave.spec, NULL) < 0) {
-						SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-								"Couldn't open audio: %s\n", SDL_GetError());
-						SDL_FreeWAV(wave.sound);
-					}
-
-					SDL_Log("Using audio driver: %s\n",
-							SDL_GetCurrentAudioDriver());
-					printf("SDL_AudioSpec.samples:%d", wave.spec.samples);
-					printf("SDL_AudioSpec sample size:%d", wave.spec.format); //AUDIO_S16LSB
-					printf("SDL_AudioSpec.channels:%d", wave.spec.channels);
-					printf("SDL_AudioSpec.size:%d", wave.spec.size); //跟回调函数的len相等应该是样品数*样品所占字节数
-					/* Let the audio run */
-					SDL_PauseAudio(0);
-					while ((SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)) //获取音频状态
-						SDL_Delay(1000);
-
-					/* Clean up on signal */
-					SDL_CloseAudio(); //关掉音频进程以及音频设备
-					SDL_FreeWAV(wave.sound); //释放数据由SDL_LoadWAV申请的
-
+//					/* Load the wave file into memory */
+//					if (SDL_LoadWAV(filename, &wave.spec, &wave.sound,
+//							&wave.soundlen) == NULL) {
+//						SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+//								SDL_GetError());
+//					}
+//					played = false;
+//					wave.spec.callback = fillerup; //设置回调函数
+//					/* Initialize fillerup() variables */
+//					if (SDL_OpenAudio(&wave.spec, NULL) < 0) {
+//						SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+//								"Couldn't open audio: %s\n", SDL_GetError());
+//						SDL_FreeWAV(wave.sound);
+//					}
+//
+//					SDL_PauseAudio(0);
+//					while (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)
+//						;
+//
+//					SDL_CloseAudio(); //关掉音频进程以及音频设备
+//					SDL_FreeWAV(wave.sound); //释放数据由SDL_LoadWAV申请的
 				}
 				while (angle > 0) {
 					double dx = angle / 50;
