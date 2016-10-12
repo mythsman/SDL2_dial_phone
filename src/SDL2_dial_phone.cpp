@@ -46,7 +46,7 @@ void playMusic(int number) {
 	if (SDL_GetAudioStatus() != SDL_AUDIO_PLAYING) {
 		if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
 			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-					"Couldn't open audio: %s\n", SDL_GetError());
+					"Couldn't open audio: %s", SDL_GetError());
 			SDL_FreeWAV(wave->data);
 		}
 	}
@@ -98,11 +98,11 @@ int main(int argc, char** argv) {
 	window = SDL_CreateWindow("DiaPhone", SDL_WINDOWPOS_CENTERED,
 	SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
 	if (window == nullptr) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, SDL_GetError());
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Window init failure : %s",SDL_GetError());
 	}
 	render = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
 	if (render == nullptr) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, SDL_GetError());
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Render init failure : %s",SDL_GetError());
 	}
 
 	//加载图片资源
@@ -121,9 +121,9 @@ int main(int argc, char** argv) {
 	char filename[50] = { 0 };
 	for (int i = 0; i < 10; i++) {
 		sprintf(filename, "resources/audio/%c.wav", i + '0');
-		if (SDL_LoadWAV(filename, &waves[1].spec, &waves[i].data,
+		if (SDL_LoadWAV(filename, &waves[i].spec, &waves[i].data,
 				&waves[i].length) == NULL) {
-			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, SDL_GetError());
+			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",SDL_GetError());
 		}
 	}
 
