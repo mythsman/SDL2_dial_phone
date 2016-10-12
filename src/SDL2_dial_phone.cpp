@@ -22,35 +22,49 @@ struct Wave {
 	unsigned int length;
 	int currentPos;
 };
-Wave *wave; //当前音频文件数据
-Wave waves[10]; //缓存音频文件数据
+Wave *wave, waveDing, waveCala; //当前音频文件数据
 
 //播放音频回调函数
 void audioCallback(void *unused, unsigned char * stream, int len) {
-	SDL_memset(stream, 0, len);//初始化音频缓冲区流
-	if (wave->currentPos + len < wave->length) {//缓冲区不足
+	SDL_memset(stream, 0, len); //初始化音频缓冲区流
+	if (wave->currentPos + len < wave->length) { //缓冲区不足
 		SDL_memcpy(stream, wave->data + wave->currentPos, len);
 		wave->currentPos += len;
-	} else {//缓冲区充足
+	} else { //缓冲区充足
 		SDL_memcpy(stream, wave->data + wave->currentPos,
 				wave->length - wave->currentPos);
 		wave->currentPos = wave->length;
 	}
 }
 
-//播放指定音乐
-void playMusic(int number) {
-	wave = &waves[number];
+void playDing() {
+	wave = &waveDing;
 	wave->spec.callback = audioCallback;
 	wave->currentPos = 0;
-	if (SDL_GetAudioStatus() != SDL_AUDIO_PLAYING) {
-		if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
-			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-					"Couldn't open audio: %s", SDL_GetError());
-			SDL_FreeWAV(wave->data);
-		}
+	SDL_CloseAudio();
+	if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open audio: %s",
+				SDL_GetError());
+		SDL_FreeWAV(wave->data);
 	}
-	SDL_Log("Play music %d",number);
+	SDL_Log("Play Ding");
+	SDL_PauseAudio(0);
+}
+
+//播放指定音乐
+void playCala() {
+	wave = &waveCala;
+	wave->spec.callback = audioCallback;
+	wave->currentPos = 0;
+	if (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)
+		SDL_CloseAudio();
+	if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open audio: %s",
+				SDL_GetError());
+		SDL_FreeWAV(wave->data);
+	}
+
+	SDL_Log("Play Cala");
 	SDL_PauseAudio(0);
 }
 
@@ -98,11 +112,13 @@ int main(int argc, char** argv) {
 	window = SDL_CreateWindow("DiaPhone", SDL_WINDOWPOS_CENTERED,
 	SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
 	if (window == nullptr) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Window init failure : %s",SDL_GetError());
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Window init failure : %s",
+				SDL_GetError());
 	}
 	render = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
 	if (render == nullptr) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Render init failure : %s",SDL_GetError());
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Render init failure : %s",
+				SDL_GetError());
 	}
 
 	//加载图片资源
@@ -118,13 +134,15 @@ int main(int argc, char** argv) {
 	SDL_RenderPresent(render);
 
 	//加载音频资源
-	char filename[50] = { 0 };
-	for (int i = 0; i < 10; i++) {
-		sprintf(filename, "resources/audio/%c.wav", i + '0');
-		if (SDL_LoadWAV(filename, &waves[i].spec, &waves[i].data,
-				&waves[i].length) == NULL) {
-			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",SDL_GetError());
-		}
+	if (SDL_LoadWAV("resources/audio/b.wav", &waveCala.spec, &waveCala.data,
+			&waveCala.length) == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",
+				SDL_GetError());
+	}
+	if (SDL_LoadWAV("resources/audio/ding.wav", &waveDing.spec, &waveDing.data,
+			&waveDing.length) == NULL) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",
+				SDL_GetError());
 	}
 
 	//事件循环
@@ -136,6 +154,7 @@ int main(int argc, char** argv) {
 	bool angleFixed = false;
 	char phoneNumber[100] = { 0 };
 	double angle = 0;
+	double accAngle = 0;
 	SDL_Point rawPoint;
 	while (quit == false) {
 		SDL_Event event;
@@ -167,13 +186,18 @@ int main(int argc, char** argv) {
 					SDL_RenderCopyEx(render, textureRoundel, NULL, NULL, angle,
 							&roundelCenterPoint, SDL_FLIP_NONE);
 					angle += deltaAngle;
+					accAngle += deltaAngle;
 					angleFixed = false;
+
 					if (angle > 32 * (clickNumber == 0 ? 10 : clickNumber)) {
 						angle = 32 * (clickNumber == 0 ? 10 : clickNumber);
 						angleFixed = true;
-
 					} else if (angle < 0) {
 						angle = 0;
+					}
+					while (accAngle > 10 && !angleFixed) { //模拟Cala声
+						accAngle -= 10;
+						playCala();
 					}
 					SDL_RenderCopy(render, texturePointer, NULL, &rect);
 					SDL_RenderPresent(render);
@@ -209,16 +233,16 @@ int main(int argc, char** argv) {
 				}
 				if (angleFixed) {
 					phoneNumber[strlen(phoneNumber)] = clickNumber + '0';
-					SDL_Log("Current number is %s",phoneNumber);
+					SDL_Log("Current number is %s", phoneNumber);
 					angleFixed = false;
-					playMusic(clickNumber); //播放按键
+					playDing(); //模拟Ding声
+
 				}
 				while (angle > 0) {
 					double dx = angle / 50; //设置转盘阻尼
 					if (dx < 0.3)
 						dx = 0.3;
 					angle -= dx * speed;
-
 					SDL_RenderCopy(render, textureButtom, NULL, &rect);
 					SDL_RenderCopyEx(render, textureRoundel, NULL, NULL, angle,
 							&roundelCenterPoint, SDL_FLIP_NONE);
@@ -233,10 +257,8 @@ int main(int argc, char** argv) {
 	}
 	//释放音频资源
 	SDL_CloseAudio();
-	for (int i = 0; i < 10; i++) {
-		SDL_FreeWAV(waves[i].data);
-	}
-
+	SDL_FreeWAV(waveDing.data);
+	SDL_FreeWAV(waveCala.data);
 	//释放图片资源
 	SDL_DestroyTexture(textureButtom);
 	SDL_DestroyTexture(textureRoundel);
