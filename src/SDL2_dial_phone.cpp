@@ -2,9 +2,8 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_audio.h>
-#include <iostream>
-#include <string>
-#include <cmath>
+#include <stdio.h>
+#include <math.h>
 
 const int windowWidth = 736;
 const int windowHeight = 736;
@@ -16,45 +15,46 @@ SDL_Texture *textureButtom;
 SDL_Texture *textureRoundel;
 SDL_Texture *texturePointer;
 SDL_Point roundelCenterPoint;
-bool played;
-struct {
+
+struct Wave {
 	SDL_AudioSpec spec;
-	unsigned char *sound; /* Pointer to wave data */
-	unsigned int soundlen; /* Length of wave data */
-	int soundpos; /* Current play position */
-} wave;
+	unsigned char *data;
+	unsigned int length;
+	int currentPos;
+};
+Wave *wave; //当前音频文件数据
+Wave waves[10]; //缓存音频文件数据
 
-void fillerup(void *unused, unsigned char * stream, int len) {
-
-	if (wave.soundlen >= len)
-		return;
-	unsigned char *waveptr;
-	int waveleft;
-
-	/* Set up the pointers */
-	waveptr = wave.sound + wave.soundpos;
-	waveleft = wave.soundlen - wave.soundpos;
-
-	/* Go! */
-	while (waveleft <= len) {
-		SDL_memcpy(stream, waveptr, waveleft);
-		stream += waveleft;
-		len -= waveleft;
-		waveptr = wave.sound;
-		waveleft = wave.soundlen;
-		wave.soundpos = 0;
-	}
-
-	SDL_memcpy(stream, waveptr, len);
-	wave.soundpos += len;
-	SDL_Log("Play end");
-}
-void reportError(void *pointer) {
-	if (pointer == nullptr) {
-		SDL_Log(SDL_GetError());
+//播放音频回调函数
+void audioCallback(void *unused, unsigned char * stream, int len) {
+	SDL_memset(stream, 0, len);//初始化音频缓冲区流
+	if (wave->currentPos + len < wave->length) {//缓冲区不足
+		SDL_memcpy(stream, wave->data + wave->currentPos, len);
+		wave->currentPos += len;
+	} else {//缓冲区充足
+		SDL_memcpy(stream, wave->data + wave->currentPos,
+				wave->length - wave->currentPos);
+		wave->currentPos = wave->length;
 	}
 }
 
+//播放指定音乐
+void playMusic(int number) {
+	wave = &waves[number];
+	wave->spec.callback = audioCallback;
+	wave->currentPos = 0;
+	if (SDL_GetAudioStatus() != SDL_AUDIO_PLAYING) {
+		if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
+			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+					"Couldn't open audio: %s\n", SDL_GetError());
+			SDL_FreeWAV(wave->data);
+		}
+	}
+	SDL_Log("Play music %d",number);
+	SDL_PauseAudio(0);
+}
+
+//获得按钮位置
 int getPosition(int x, int y) {
 	if ((x - 467) * (x - 467) + (y - 366) * (y - 366) <= 400)
 		return 1;
@@ -79,11 +79,11 @@ int getPosition(int x, int y) {
 	return -1;
 }
 
+//计算向量夹角
 double getAngle(SDL_Point p1, SDL_Point center, SDL_Point p2) {
 	double x1 = p1.x - center.x, y1 = p1.y - center.y;
 	double x2 = p2.x - center.x, y2 = p2.y - center.y;
-	double ans = std::acos(
-			(x1 * x2 + y1 * y2) / std::hypot(x1, y1) / std::hypot(x2, y2))
+	double ans = acos((x1 * x2 + y1 * y2) / hypot(x1, y1) / hypot(x2, y2))
 			/ M_PI * 180;
 	if (x1 * y2 - x2 * y1 < 0)
 		ans = -ans;
@@ -91,13 +91,21 @@ double getAngle(SDL_Point p1, SDL_Point center, SDL_Point p2) {
 }
 
 int main(int argc, char** argv) {
+
+	//初始化窗口
 	SDL_Init(SDL_INIT_EVERYTHING);
 	IMG_Init(IMG_INIT_PNG);
 	window = SDL_CreateWindow("DiaPhone", SDL_WINDOWPOS_CENTERED,
 	SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, SDL_WINDOW_SHOWN);
-	reportError(window);
+	if (window == nullptr) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, SDL_GetError());
+	}
 	render = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
-	reportError(render);
+	if (render == nullptr) {
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, SDL_GetError());
+	}
+
+	//加载图片资源
 	textureButtom = IMG_LoadTexture(render, "resources/pictures/buttom.png");
 	textureRoundel = IMG_LoadTexture(render, "resources/pictures/roundel.png");
 	texturePointer = IMG_LoadTexture(render, "resources/pictures/pointer.png");
@@ -108,13 +116,25 @@ int main(int argc, char** argv) {
 	SDL_RenderCopy(render, textureRoundel, NULL, &rect);
 	SDL_RenderCopy(render, texturePointer, NULL, &rect);
 	SDL_RenderPresent(render);
+
+	//加载音频资源
+	char filename[50] = { 0 };
+	for (int i = 0; i < 10; i++) {
+		sprintf(filename, "resources/audio/%c.wav", i + '0');
+		if (SDL_LoadWAV(filename, &waves[1].spec, &waves[i].data,
+				&waves[i].length) == NULL) {
+			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, SDL_GetError());
+		}
+	}
+
+	//事件循环
 	bool quit = false;
 	int number = -1;
 	int clickNumber = -1;
 	bool dragging = false;
 	bool mouseDown = false;
 	bool angleFixed = false;
-	std::string phoneNumber = "";
+	char phoneNumber[100] = { 0 };
 	double angle = 0;
 	SDL_Point rawPoint;
 	while (quit == false) {
@@ -188,43 +208,17 @@ int main(int argc, char** argv) {
 							SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND));
 				}
 				if (angleFixed) {
-					phoneNumber += (clickNumber + '0');
-					std::cout << phoneNumber << std::endl;
+					phoneNumber[strlen(phoneNumber)] = clickNumber + '0';
+					SDL_Log("Current number is %s",phoneNumber);
 					angleFixed = false;
-					char filename[50] = { 0 };
-					sprintf(filename, "resources/audio/%c.wav",
-							clickNumber + '0');
-//					/* Load the wave file into memory */
-//					if (SDL_LoadWAV(filename, &wave.spec, &wave.sound,
-//							&wave.soundlen) == NULL) {
-//						SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-//								SDL_GetError());
-//					}
-//					played = false;
-//					wave.spec.callback = fillerup; //设置回调函数
-//					/* Initialize fillerup() variables */
-//					if (SDL_OpenAudio(&wave.spec, NULL) < 0) {
-//						SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-//								"Couldn't open audio: %s\n", SDL_GetError());
-//						SDL_FreeWAV(wave.sound);
-//					}
-//
-//					SDL_PauseAudio(0);
-//					while (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)
-//						;
-//
-//					SDL_CloseAudio(); //关掉音频进程以及音频设备
-//					SDL_FreeWAV(wave.sound); //释放数据由SDL_LoadWAV申请的
+					playMusic(clickNumber); //播放按键
 				}
 				while (angle > 0) {
-					double dx = angle / 50;
+					double dx = angle / 50; //设置转盘阻尼
 					if (dx < 0.3)
 						dx = 0.3;
-					if (angle > dx * speed) {
-						angle -= dx * speed;
-					} else {
-						angle -= 0.1;
-					}
+					angle -= dx * speed;
+
 					SDL_RenderCopy(render, textureButtom, NULL, &rect);
 					SDL_RenderCopyEx(render, textureRoundel, NULL, NULL, angle,
 							&roundelCenterPoint, SDL_FLIP_NONE);
@@ -237,9 +231,18 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
+	//释放音频资源
+	SDL_CloseAudio();
+	for (int i = 0; i < 10; i++) {
+		SDL_FreeWAV(waves[i].data);
+	}
+
+	//释放图片资源
 	SDL_DestroyTexture(textureButtom);
 	SDL_DestroyTexture(textureRoundel);
 	SDL_DestroyTexture(texturePointer);
+
+	//释放窗口
 	SDL_DestroyRenderer(render);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
