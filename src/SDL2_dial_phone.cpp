@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
 	SDL_RenderPresent(render);
 
 //加载音频资源
-	if (SDL_LoadWAV("resources/audio/b.wav", &waveCala.spec, &waveCala.data,
+	if (SDL_LoadWAV("resources/audio/cala.wav", &waveCala.spec, &waveCala.data,
 			&waveCala.length) == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",
 				SDL_GetError());
