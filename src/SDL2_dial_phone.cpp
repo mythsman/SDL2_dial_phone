@@ -23,17 +23,24 @@ struct Wave {
 	int currentPos;
 };
 Wave *wave, waveDing, waveCala; //当前音频文件数据
-
+bool played = false;
 //播放音频回调函数
 void audioCallback(void *unused, unsigned char * stream, int len) {
 	SDL_memset(stream, 0, len); //初始化音频缓冲区流
-	if (wave->currentPos + len < wave->length) { //缓冲区不足
-		SDL_memcpy(stream, wave->data + wave->currentPos, len);
-		wave->currentPos += len;
-	} else { //缓冲区充足
-		SDL_memcpy(stream, wave->data + wave->currentPos,
-				wave->length - wave->currentPos);
-		wave->currentPos = wave->length;
+	if (wave == &waveDing) {
+		if (wave->currentPos + len < wave->length) { //缓冲区不足
+			SDL_memcpy(stream, wave->data + wave->currentPos, len);
+			wave->currentPos += len;
+		} else { //缓冲区充足
+			SDL_memcpy(stream, wave->data + wave->currentPos,
+					wave->length - wave->currentPos);
+			wave->currentPos = wave->length;
+		}
+	} else {
+		if (!played) {
+			SDL_memcpy(stream, wave->data, wave->length);
+			played = true;
+		}
 	}
 }
 
@@ -41,7 +48,8 @@ void playDing() {
 	wave = &waveDing;
 	wave->spec.callback = audioCallback;
 	wave->currentPos = 0;
-	SDL_CloseAudio();
+	if (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)
+		SDL_CloseAudio();
 	if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open audio: %s",
 				SDL_GetError());
@@ -53,18 +61,30 @@ void playDing() {
 
 //播放指定音乐
 void playCala() {
-	wave = &waveCala;
-	wave->spec.callback = audioCallback;
-	wave->currentPos = 0;
-	if (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)
-		SDL_CloseAudio();
-	if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open audio: %s",
-				SDL_GetError());
-		SDL_FreeWAV(wave->data);
+	if (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING) {
+		if (wave == &waveDing) {
+			SDL_CloseAudio();
+			wave = &waveCala;
+			wave->spec.callback = audioCallback;
+			wave->currentPos = 0;
+			if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
+				SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+						"Couldn't open audio: %s", SDL_GetError());
+				SDL_FreeWAV(wave->data);
+			}
+		}
+	} else {
+		wave = &waveCala;
+		wave->spec.callback = audioCallback;
+		wave->currentPos = 0;
+		if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
+			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+					"Couldn't open audio: %s", SDL_GetError());
+			SDL_FreeWAV(wave->data);
+		}
 	}
-
 	SDL_Log("Play Cala");
+	played = false;
 	SDL_PauseAudio(0);
 }
 
@@ -106,7 +126,7 @@ double getAngle(SDL_Point p1, SDL_Point center, SDL_Point p2) {
 
 int main(int argc, char** argv) {
 
-	//初始化窗口
+//初始化窗口
 	SDL_Init(SDL_INIT_EVERYTHING);
 	IMG_Init(IMG_INIT_PNG);
 	window = SDL_CreateWindow("DiaPhone", SDL_WINDOWPOS_CENTERED,
@@ -121,7 +141,7 @@ int main(int argc, char** argv) {
 				SDL_GetError());
 	}
 
-	//加载图片资源
+//加载图片资源
 	textureButtom = IMG_LoadTexture(render, "resources/pictures/buttom.png");
 	textureRoundel = IMG_LoadTexture(render, "resources/pictures/roundel.png");
 	texturePointer = IMG_LoadTexture(render, "resources/pictures/pointer.png");
@@ -133,7 +153,7 @@ int main(int argc, char** argv) {
 	SDL_RenderCopy(render, texturePointer, NULL, &rect);
 	SDL_RenderPresent(render);
 
-	//加载音频资源
+//加载音频资源
 	if (SDL_LoadWAV("resources/audio/b.wav", &waveCala.spec, &waveCala.data,
 			&waveCala.length) == NULL) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",
@@ -145,7 +165,7 @@ int main(int argc, char** argv) {
 				SDL_GetError());
 	}
 
-	//事件循环
+//事件循环
 	bool quit = false;
 	int number = -1;
 	int clickNumber = -1;
@@ -195,8 +215,8 @@ int main(int argc, char** argv) {
 					} else if (angle < 0) {
 						angle = 0;
 					}
-					while (accAngle > 10 && !angleFixed) { //模拟Cala声
-						accAngle -= 10;
+					while (accAngle > 36 && !angleFixed) { //模拟Cala声
+						accAngle -= 36;
 						playCala();
 					}
 					SDL_RenderCopy(render, texturePointer, NULL, &rect);
@@ -255,16 +275,16 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
-	//释放音频资源
+//释放音频资源
 	SDL_CloseAudio();
 	SDL_FreeWAV(waveDing.data);
 	SDL_FreeWAV(waveCala.data);
-	//释放图片资源
+//释放图片资源
 	SDL_DestroyTexture(textureButtom);
 	SDL_DestroyTexture(textureRoundel);
 	SDL_DestroyTexture(texturePointer);
 
-	//释放窗口
+//释放窗口
 	SDL_DestroyRenderer(render);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
