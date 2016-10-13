@@ -38,7 +38,8 @@ void audioCallback(void *unused, unsigned char * stream, int len) {
 		}
 	} else {
 		if (!played) {
-			SDL_memcpy(stream, wave->data, wave->length);
+			SDL_memcpy(stream, wave->data,
+					wave->length < len ? wave->length : len);
 			played = true;
 		}
 	}
