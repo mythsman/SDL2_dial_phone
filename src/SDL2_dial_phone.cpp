@@ -2,6 +2,7 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_audio.h>
+#include <SDL2/SDL_mixer.h>
 #include <stdio.h>
 #include <math.h>
 
@@ -15,81 +16,22 @@ SDL_Texture *textureButtom;
 SDL_Texture *textureRoundel;
 SDL_Texture *texturePointer;
 SDL_Point roundelCenterPoint;
+Mix_Chunk *ding, *cala;
 
-struct Wave {
-	SDL_AudioSpec spec;
-	unsigned char *data;
-	unsigned int length;
-	int currentPos;
-};
-Wave *wave, waveDing, waveCala; //当前音频文件数据
-bool played = false;
-//播放音频回调函数
-void audioCallback(void *unused, unsigned char * stream, int len) {
-	SDL_memset(stream, 0, len); //初始化音频缓冲区流
-	if (wave == &waveDing) {
-		if (wave->currentPos + len < wave->length) { //缓冲区不足
-			SDL_memcpy(stream, wave->data + wave->currentPos, len);
-			wave->currentPos += len;
-		} else { //缓冲区充足
-			SDL_memcpy(stream, wave->data + wave->currentPos,
-					wave->length - wave->currentPos);
-			wave->currentPos = wave->length;
-		}
-	} else {
-		if (!played) {
-			SDL_memcpy(stream, wave->data,
-					wave->length < len ? wave->length : len);
-			played = true;
-		}
-	}
-}
-
+//play specified music
 void playDing() {
-	wave = &waveDing;
-	wave->spec.callback = audioCallback;
-	wave->currentPos = 0;
-	if (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING)
-		SDL_CloseAudio();
-	if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't open audio: %s",
-				SDL_GetError());
-		SDL_FreeWAV(wave->data);
+	if (Mix_PlayChannel(-1, ding, 0) == -1) {
+		printf("Mix_PlayChannel: %s\n", Mix_GetError());
 	}
-	SDL_Log("Play Ding");
-	SDL_PauseAudio(0);
 }
 
-//播放指定音乐
 void playCala() {
-	if (SDL_GetAudioStatus() == SDL_AUDIO_PLAYING) {
-		if (wave == &waveDing) {
-			SDL_CloseAudio();
-			wave = &waveCala;
-			wave->spec.callback = audioCallback;
-			wave->currentPos = 0;
-			if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
-				SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-						"Couldn't open audio: %s", SDL_GetError());
-				SDL_FreeWAV(wave->data);
-			}
-		}
-	} else {
-		wave = &waveCala;
-		wave->spec.callback = audioCallback;
-		wave->currentPos = 0;
-		if (SDL_OpenAudio(&wave->spec, NULL) < 0) {
-			SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-					"Couldn't open audio: %s", SDL_GetError());
-			SDL_FreeWAV(wave->data);
-		}
+	if (Mix_PlayChannel(-1, cala, 0) == -1) {
+		printf("Mix_PlayChannel: %s\n", Mix_GetError());
 	}
-	SDL_Log("Play Cala");
-	played = false;
-	SDL_PauseAudio(0);
 }
 
-//获得按钮位置
+//get the position of mouse
 int getPosition(int x, int y) {
 	if ((x - 467) * (x - 467) + (y - 366) * (y - 366) <= 400)
 		return 1;
@@ -114,7 +56,7 @@ int getPosition(int x, int y) {
 	return -1;
 }
 
-//计算向量夹角
+//calculate the angle(signed)
 double getAngle(SDL_Point p1, SDL_Point center, SDL_Point p2) {
 	double x1 = p1.x - center.x, y1 = p1.y - center.y;
 	double x2 = p2.x - center.x, y2 = p2.y - center.y;
@@ -127,7 +69,7 @@ double getAngle(SDL_Point p1, SDL_Point center, SDL_Point p2) {
 
 int main(int argc, char** argv) {
 
-//初始化窗口
+//init
 	SDL_Init(SDL_INIT_EVERYTHING);
 	IMG_Init(IMG_INIT_PNG);
 	window = SDL_CreateWindow("DiaPhone", SDL_WINDOWPOS_CENTERED,
@@ -142,7 +84,7 @@ int main(int argc, char** argv) {
 				SDL_GetError());
 	}
 
-//加载图片资源
+//load pictures
 	textureButtom = IMG_LoadTexture(render, "resources/pictures/buttom.png");
 	textureRoundel = IMG_LoadTexture(render, "resources/pictures/roundel.png");
 	texturePointer = IMG_LoadTexture(render, "resources/pictures/pointer.png");
@@ -154,19 +96,16 @@ int main(int argc, char** argv) {
 	SDL_RenderCopy(render, texturePointer, NULL, &rect);
 	SDL_RenderPresent(render);
 
-//加载音频资源
-	if (SDL_LoadWAV("resources/audio/cala.wav", &waveCala.spec, &waveCala.data,
-			&waveCala.length) == NULL) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",
-				SDL_GetError());
-	}
-	if (SDL_LoadWAV("resources/audio/ding.wav", &waveDing.spec, &waveDing.data,
-			&waveDing.length) == NULL) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio loading failure : %s",
-				SDL_GetError());
+//load audio
+	if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) == -1) {
+		printf("Mix_OpenAudio: %s\n", Mix_GetError());
+		exit(2);
 	}
 
-//事件循环
+	ding = Mix_LoadWAV("resources/audio/ding.wav");
+	cala = Mix_LoadWAV("resources/audio/cala.wav");
+
+//main loop
 	bool quit = false;
 	int number = -1;
 	int clickNumber = -1;
@@ -216,8 +155,8 @@ int main(int argc, char** argv) {
 					} else if (angle < 0) {
 						angle = 0;
 					}
-					while (accAngle > 36 && !angleFixed) { //模拟Cala声
-						accAngle -= 36;
+					while (accAngle > 25 && !angleFixed) {
+						accAngle -= 25;
 						playCala();
 					}
 					SDL_RenderCopy(render, texturePointer, NULL, &rect);
@@ -256,11 +195,11 @@ int main(int argc, char** argv) {
 					phoneNumber[strlen(phoneNumber)] = clickNumber + '0';
 					SDL_Log("Current number is %s", phoneNumber);
 					angleFixed = false;
-					playDing(); //模拟Ding声
+					playDing();
 
 				}
 				while (angle > 0) {
-					double dx = angle / 50; //设置转盘阻尼
+					double dx = angle / 50;
 					if (dx < 0.3)
 						dx = 0.3;
 					angle -= dx * speed;
@@ -276,16 +215,13 @@ int main(int argc, char** argv) {
 			}
 		}
 	}
-//释放音频资源
-	SDL_CloseAudio();
-	SDL_FreeWAV(waveDing.data);
-	SDL_FreeWAV(waveCala.data);
-//释放图片资源
+//free resources
+	Mix_FreeChunk(ding);
+	Mix_FreeChunk(cala);
+	Mix_Quit();
 	SDL_DestroyTexture(textureButtom);
 	SDL_DestroyTexture(textureRoundel);
 	SDL_DestroyTexture(texturePointer);
-
-//释放窗口
 	SDL_DestroyRenderer(render);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
