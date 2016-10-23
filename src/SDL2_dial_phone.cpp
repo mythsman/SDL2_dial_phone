@@ -155,8 +155,8 @@ int main(int argc, char** argv) {
 					} else if (angle < 0) {
 						angle = 0;
 					}
-					while (accAngle > 25 && !angleFixed) {
-						accAngle -= 25;
+					while (accAngle > 30 && !angleFixed) {
+						accAngle -= 30;
 						playCala();
 					}
 					SDL_RenderCopy(render, texturePointer, NULL, &rect);
